@@ -3,13 +3,6 @@
 // #include <signal.h> // the debugging machinery + breakpoint aidee
 // raise(SIGINT);
 
-extern SEXP char_integer64;
-
-static union {
-    double d;
-    unsigned long long ull;
-} u;
-
 SEXP frank(SEXP xorderArg, SEXP xstartArg, SEXP xlenArg, SEXP ties_method) {
     int i=0, j=0, k=0, n;
     int *xstart = INTEGER(xstartArg), *xlen = INTEGER(xlenArg), *xorder = INTEGER(xorderArg);

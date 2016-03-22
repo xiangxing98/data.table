@@ -68,6 +68,12 @@ SEXP whichwrapper(SEXP x, SEXP bool) {
     return which(x, LOGICAL(bool)[0]);
 }
 
+extern SEXP char_integer64;
+static union {
+    double d;
+    unsigned long long ull;
+} u;
+
 // internal version of anyNA for data.tables
 SEXP anyNA(SEXP x, SEXP cols) {
     int i, j, n=0, this;
