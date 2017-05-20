@@ -69,6 +69,7 @@ aggregate_funs <- function(funs, vals, sep="_", ...) {
             vals = replicate(length(funs), vals)
         else stop("When 'fun.aggregate' and 'value.var' are both lists, 'value.var' must be either of length =1 or =length(fun.aggregate).")
     }
+    only_one_fun = length(unlist(funs)) == 1L
     dots = list(...)
     construct_funs <- function(fun, val) {
         if (!is.list(fun)) fun = list(fun)
@@ -82,7 +83,8 @@ aggregate_funs <- function(funs, vals, sep="_", ...) {
                     expr = c(expr, dots)
                 ans[[k]] = as.call(expr)
                 # changed order of arguments here, #1153
-                nms[k] = paste(j, all.names(i, max.names=1L, functions=TRUE), sep=sep)
+                nms[k] = if (only_one_fun) j else 
+                            paste(j, all.names(i, max.names=1L, functions=TRUE), sep=sep)
                 k = k+1L;
             }
         }
@@ -112,7 +114,7 @@ dcast.data.table <- function(data, formula, fun.aggregate = NULL, sep = "_", ...
     }
     setattr(lvars, 'names', c("lhs", "rhs"))
     # Have to take care of duplicate names, and provide names for expression columns properly.
-    varnames = make.unique(sapply(unlist(lvars), all.vars, max.names=1L), sep=sep)
+    varnames = make.unique(vapply_1c(unlist(lvars), all.vars, max.names=1L), sep=sep)
     dupidx = which(valnames %in% varnames)
     if (length(dupidx)) {
         dups = valnames[dupidx]
@@ -123,7 +125,7 @@ dcast.data.table <- function(data, formula, fun.aggregate = NULL, sep = "_", ...
     rhsnames = tail(varnames, -length(lvars$lhs))
     setattr(dat, 'names', c(varnames, valnames))
     setDT(dat)
-    if (any(sapply(as.list(dat)[varnames], is.list))) {
+    if (any(vapply_1b(as.list(dat)[varnames], is.list))) {
         stop("Columns specified in formula can not be of type list")
     }
     m <- as.list(match.call()[-1L])
@@ -196,12 +198,13 @@ dcast.data.table <- function(data, formula, fun.aggregate = NULL, sep = "_", ...
             .Call(Csetlistelt, mapunique, 2L, seq_len(nrow(rhs_)))
             lhs = lhs_; rhs = rhs_
         }
-        maplen = sapply(mapunique, length)
+        maplen = vapply_1i(mapunique, length)
         idx = do.call("CJ", mapunique)[map, I := .I][["I"]] # TO DO: move this to C and avoid materialising the Cross Join.
-        ans = .Call("Cfcast", lhs, val, maplen[[1L]], maplen[[2L]], idx, fill, fill.default, is.null(fun.call))
+        ans = .Call(Cfcast, lhs, val, maplen[[1L]], maplen[[2L]], idx, fill, fill.default, is.null(fun.call))
         allcols = do.call("paste", c(rhs, sep=sep))
         if (length(valnames) > 1L)
-            allcols = do.call("paste", c(CJ(valnames, allcols, sorted=FALSE), sep=sep))
+            allcols = do.call("paste", if (identical(".", allcols)) list(valnames, sep=sep) 
+                        else c(CJ(valnames, allcols, sorted=FALSE), sep=sep))
             # removed 'setcolorder()' here, #1153
         setattr(ans, 'names', c(lhsnames, allcols))
         setDT(ans); setattr(ans, 'sorted', lhsnames)
@@ -219,7 +222,7 @@ dcast.data.table <- function(data, formula, fun.aggregate = NULL, sep = "_", ...
             lhs_ = cj_uniq(lhs)
             idx = lhs_[lhs, I := .I][["I"]]
             lhs_[, I := NULL]
-            ans = .Call("Cfcast", lhs_, val, nrow(lhs_), 1L, idx, fill, fill.default, is.null(fun.call))
+            ans = .Call(Cfcast, lhs_, val, nrow(lhs_), 1L, idx, fill, fill.default, is.null(fun.call))
             setDT(ans); setattr(ans, 'sorted', lhsnames)
             setnames(ans, c(lhsnames, valnames))
         }

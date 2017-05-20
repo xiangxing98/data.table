@@ -36,7 +36,7 @@ setkeyv <- function(x, cols, verbose=getOption("datatable.verbose"), physical=TR
         return(invisible(x))
     }
     if (identical(cols,"")) stop("cols is the empty string. Use NULL to remove the key.")
-    if (any(nchar(cols)==0)) stop("cols contains some blanks.")
+    if (!all(nzchar(cols))) stop("cols contains some blanks.")
     if (!length(cols)) {
         cols = colnames(x)   # All columns in the data.table, usually a few when used in this form
     } else {
@@ -86,10 +86,13 @@ key2 <- function(x) {
     if (is.null(ans)) return(ans) # otherwise character() gets returned by next line
     gsub("^__","",ans)
 }
-indices <- function(x) {
+indices <- function(x, vectors = FALSE) {
     ans = names(attributes(attr(x,"index",exact=TRUE)))
     if (is.null(ans)) return(ans) # otherwise character() gets returned by next line
-    gsub("^__","",ans)
+    ans <- gsub("^__","",ans)
+    if (isTRUE(vectors))
+        ans <- strsplit(ans, "__", fixed = TRUE)
+    ans
 }
 
 get2key <- function(x, col) attr(attr(x,"index",exact=TRUE),paste("__",col,sep=""),exact=TRUE)   # work in progress, not yet exported
@@ -223,10 +226,19 @@ forder <- function(x, ..., na.last=TRUE, decreasing=FALSE)
     o
 }
 
-fsort <- function(x, decreasing = FALSE, na.last = FALSE, ...)
+fsort <- function(x, decreasing = FALSE, na.last = FALSE, internal=FALSE, verbose=FALSE, ...)
 {
-    o = forderv(x, order=!decreasing, na.last=na.last)
-    return( if (length(o)) x[o] else x )   # TO DO: document the nice efficiency here
+    if (typeof(x)=="double" && !decreasing && !na.last) {
+      if (internal) stop("Internal code should not be being called on type double")
+      return(.Call(Cfsort, x, verbose))
+    } else {
+      # fsort is now exported for testing. Trying to head off complaints "it's slow on integer"
+      # The only places internally we use fsort internally (3 calls, all on integer) have had internal=TRUE added for now.
+      # TODO: implement integer and character in Cfsort and remove this branch and warning
+      if (!internal) warning("Input is not a vector of type double. New parallel sort has only been done for double vectors so far. Invoking relatively inefficient sort using order first.")
+      o = forderv(x, order=!decreasing, na.last=na.last)
+      return( if (length(o)) x[o] else x )   # TO DO: document this shortcut for already-sorted
+    }
 }
 
 setorder <- function(x, ..., na.last=FALSE)
@@ -267,7 +279,7 @@ setorderv <- function(x, cols, order=1L, na.last=FALSE)
         warning("cols is a character vector of zero length. Use NULL instead, or wrap with suppressWarnings() to avoid this warning.")
         return(x)
     }
-    if (any(nchar(cols)==0)) stop("cols contains some blanks.")     # TODO: probably I'm checking more than necessary here.. there are checks in 'forderv' as well
+    if (!all(nzchar(cols))) stop("cols contains some blanks.")     # TODO: probably I'm checking more than necessary here.. there are checks in 'forderv' as well
     if (!length(cols)) {
         cols = colnames(x)   # All columns in the data.table, usually a few when used in this form
     } else {
